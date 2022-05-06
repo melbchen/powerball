@@ -2,21 +2,17 @@
 
 pragma solidity ^0.8.13;
 
-struct Ticket {
-    uint256[] numbers;
-    uint256 thePowerball;
-}
-
-struct Game {
-    address player;
-    Ticket ticket;
-}
-
 contract Powerball {
+    struct Ticket {
+        uint256[] numbers;
+        uint256 thePowerball;
+    }
+
     address public manager; // the person who run draw function at the draw time
     uint256 public ticketPrice; // the price of each ticket
-    Game[] public games; // all valid games
-    // mapping(address => Ticket) public tickets; // the quantity of tickets holding by players for current draw
+    uint256 public counter; // how many tickets now
+    mapping(uint256 => address) public players; // counter mapped to player
+    mapping(uint256 => Ticket) public games; // all valid games: counter mapped to ticket
     uint256 public prizePoolTotal; // the total value of current prize pool
     Ticket public winningTicket; // the winning ticket of current draw
     mapping(address => uint256) public pendingWithdrawals; // players can withdraw if the raletive balance is non-zero
@@ -47,11 +43,7 @@ contract Powerball {
         return
             uint256(
                 keccak256(
-                    abi.encodePacked(
-                        block.difficulty,
-                        block.timestamp,
-                        games.length
-                    )
+                    abi.encodePacked(block.difficulty, block.timestamp, counter)
                 )
             );
     }
@@ -99,11 +91,11 @@ contract Powerball {
         returns (uint256[] memory)
     {
         uint256[] memory sortedNumbers;
-        uint256 counter = 0;
+        uint256 index = 0;
         for (uint256 i = 0; i < 35; i++) {
             for (uint256 j = 0; j < numbers.length; j++) {
                 if (i + 1 == numbers[j]) {
-                    sortedNumbers[counter++] = i;
+                    sortedNumbers[index++] = i;
                 }
             }
         }
@@ -118,7 +110,9 @@ contract Powerball {
         require(tickets.length > 0);
         if (msg.value >= ticketPrice * tickets.length) {
             for (uint256 i = 0; i < tickets.length; i++) {
-                games.push(Game({player: msg.sender, ticket: tickets[i]}));
+                players[counter] = msg.sender;
+                games[counter] = tickets[i];
+                counter++;
             }
 
             prizePoolTotal += msg.value;
