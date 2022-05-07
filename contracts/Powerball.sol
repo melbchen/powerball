@@ -14,8 +14,14 @@ contract Powerball {
         uint256 thePowerball;
     }
 
+    struct Division {
+        uint256 quantityOfWinners;
+        uint256 prize;
+    }
+
+    uint256[] public prizeAllocationRate;
     address public manager; // the person who run draw function at the draw time
-    // uint256 public initialPrizePool; // the initial value of current prize pool
+    uint256 public initialPrizePoolForNextDraw; // the initial value of prize pool for next Draw
     uint256 public ticketPrice; // the price of each ticket
     uint256 public counter; // how many tickets now
     uint256 public prizePoolTotal; // the total value of current prize pool
@@ -35,6 +41,8 @@ contract Powerball {
     mapping(address => uint256) public winnersDivision6; // all players who won division 6
     mapping(address => uint256) public winnersDivision7; // all players who won division 7
 
+    mapping(uint256 => Division) public divisions; // all divisions of current draw
+
     uint256 private nounceRandom;
     mapping(uint256 => uint256) public randomSevenNumbers;
     mapping(uint256 => uint256) public sortedRandomSevenNumbers;
@@ -47,6 +55,7 @@ contract Powerball {
     constructor(uint256 _ticketPrice) {
         manager = msg.sender;
         ticketPrice = _ticketPrice;
+        prizeAllocationRate = [3500, 180, 110, 200, 150, 970, 760, 1500, 2630];
     }
 
     // only manager can call
@@ -106,7 +115,7 @@ contract Powerball {
         }
     }
 
-    function transferTicketNumbersToArray(Ticket calldata ticket)
+    function transferTicketNumbersToArray(Ticket memory ticket)
         private
         pure
         returns (uint256[7] memory)
@@ -139,6 +148,41 @@ contract Powerball {
             }
         }
         return true;
+    }
+
+    function determineDivisionCategory(
+        uint256 quantityOfWinningNumbers,
+        bool isWinningThePowerball
+    ) private pure returns (uint256) {
+        uint256 devision = 100; //not win
+        if (isWinningThePowerball && quantityOfWinningNumbers == 7) {
+            devision = 0;
+        }
+        if (!isWinningThePowerball && quantityOfWinningNumbers == 7) {
+            devision = 1;
+        }
+        if (isWinningThePowerball && quantityOfWinningNumbers == 6) {
+            devision = 2;
+        }
+        if (!isWinningThePowerball && quantityOfWinningNumbers == 6) {
+            devision = 3;
+        }
+        if (isWinningThePowerball && quantityOfWinningNumbers == 5) {
+            devision = 4;
+        }
+        if (isWinningThePowerball && quantityOfWinningNumbers == 4) {
+            devision = 5;
+        }
+        if (!isWinningThePowerball && quantityOfWinningNumbers == 5) {
+            devision = 6;
+        }
+        if (isWinningThePowerball && quantityOfWinningNumbers == 3) {
+            devision = 7;
+        }
+        if (isWinningThePowerball && quantityOfWinningNumbers == 2) {
+            devision = 8;
+        }
+        return devision;
     }
 
     // players can select and pay tickets to play.
@@ -189,7 +233,45 @@ contract Powerball {
         winningTicket.number6 = sortedRandomSevenNumbers[6];
         winningTicket.thePowerball = (random() % 20) + 1;
 
+        // calculate the quantity of winners for each division
+        for (uint256 i = 0; i < counter; i++) {
+            bool isWinningThePowerball = games[i].thePowerball ==
+                winningTicket.thePowerball;
+            uint256 quantityOfWinningNumbers = 0;
+
+            uint256[7] memory numbersFromGame = transferTicketNumbersToArray(
+                games[i]
+            );
+            for (uint256 j = 0; j < 7; j++) {
+                for (uint256 m = 0; m < 7; m++) {
+                    if (numbersFromGame[j] == sortedRandomSevenNumbers[m]) {
+                        quantityOfWinningNumbers++;
+                    }
+                }
+            }
+            uint256 divisionCategory = determineDivisionCategory(
+                quantityOfWinningNumbers,
+                isWinningThePowerball
+            );
+            if (divisionCategory < 9) {
+                divisions[divisionCategory].quantityOfWinners++;
+            }
+        }
+
         // calculate the prize for each division
+        for (uint256 i = 0; i < 9; i++) {
+            if (divisions[i].quantityOfWinners > 0) {
+                divisions[i].prize =
+                    (prizePoolTotal * prizeAllocationRate[i]) /
+                    10000 /
+                    divisions[i].quantityOfWinners;
+            } else {
+                // put the prize into initial prize pool of next draw
+                initialPrizePoolForNextDraw +=
+                    (prizePoolTotal * prizeAllocationRate[i]) /
+                    10000;
+            }
+        }
     }
 
     // Withdraw funds from the contract.
