@@ -45,7 +45,7 @@ contract Powerball {
     Ticket public winningTicket; // the winning ticket of current draw
 
     mapping(uint256 => address) public players; // counter mapped to player
-    mapping(uint256 => Ticket) public games; // all valid games: counter mapped to ticket
+    mapping(uint256 => Ticket) public tickets; // all valid tickets: counter mapped to ticket
 
     uint256 public winnersCounter; // how many winners in current draw
     mapping(uint256 => Winner) public winners; // all winners: winnersCounter mapped to winner
@@ -66,7 +66,7 @@ contract Powerball {
 
     constructor(uint256 _ticketPrice) {
         manager = msg.sender;
-        ticketPrice = _ticketPrice * 1000000000000000000; // in ether
+        ticketPrice = _ticketPrice * 1000000000000000000; // ether to wei
         prizeAllocationRate = [3500, 180, 110, 200, 150, 970, 760, 1500, 2630]; // refer to: https://www.thelott.com/about/prize-pool
     }
 
@@ -219,22 +219,22 @@ contract Powerball {
     // multiple tickets supported in one transaction.
     // the caller has to transfer sufficient fund.
     // sample input in Remix: [[1,3,5,7,9,11,13,2], [2,4,6,8,10,12,14,6]]
-    function play(Ticket[] calldata tickets) public payable {
-        require(tickets.length > 0);
+    function play(Ticket[] calldata newTickets) public payable {
+        require(newTickets.length > 0);
 
         // make sure fund is sufficient
-        if (msg.value >= ticketPrice * tickets.length) {
+        if (msg.value >= ticketPrice * newTickets.length) {
             // check all tickets are valid
             bool isAllTicketsValid = true;
-            for (uint256 i = 0; i < tickets.length; i++) {
-                if (!isValidTicket(tickets[i])) {
+            for (uint256 i = 0; i < newTickets.length; i++) {
+                if (!isValidTicket(newTickets[i])) {
                     isAllTicketsValid = false;
                 }
             }
             if (isAllTicketsValid) {
-                for (uint256 i = 0; i < tickets.length; i++) {
+                for (uint256 i = 0; i < newTickets.length; i++) {
                     players[counter] = msg.sender;
-                    games[counter] = tickets[i];
+                    tickets[counter] = newTickets[i];
                     counter++;
                 }
 
@@ -269,12 +269,12 @@ contract Powerball {
 
         // calculate the quantity of winners for each division
         for (uint256 i = 0; i < counter; i++) {
-            bool isWinningThePowerball = games[i].thePowerball ==
+            bool isWinningThePowerball = tickets[i].thePowerball ==
                 winningTicket.thePowerball;
             uint256 quantityOfWinningNumbers = 0;
 
             uint256[7] memory numbersFromGame = transferTicketNumbersToArray(
-                games[i]
+                tickets[i]
             );
             for (uint256 j = 0; j < 7; j++) {
                 for (uint256 m = 0; m < 7; m++) {
@@ -292,7 +292,7 @@ contract Powerball {
 
                 winners[winnersCounter].winnerAddress = players[i];
                 winners[winnersCounter].prizeCategory = divisionCategory;
-                winners[winnersCounter].winningTicket = games[i];
+                winners[winnersCounter].winningTicket = tickets[i];
                 winnersCounter++;
             }
         }
@@ -329,7 +329,7 @@ contract Powerball {
         drawId++;
 
         // reset the game.
-        // winners, games, winningTicket, winners, divisions
+        // players, tickets, winningTicket, winners, divisions
         // don't need to reset because of being overwrited in next game
         prizePoolTotal = initialPrizePoolForNextDraw;
         initialPrizePoolForNextDraw = 0;
@@ -348,5 +348,58 @@ contract Powerball {
         if (!payable(msg.sender).send(amount)) {
             pendingWithdrawals[msg.sender] = amount;
         }
+    }
+
+    // convert a uint256 to its ASCII string decimal representation
+    // inspired by OraclizeAPI's implementation - MIT licence
+    function toString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0";
+        }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+
+    // get all tickets for a caller
+    function getMyTickets() public view returns (string memory) {
+        string memory myTickets = "";
+        for (uint256 i = 0; i < counter; i++) {
+            if (players[i] == msg.sender) {
+                string memory s = string(
+                    abi.encodePacked(
+                        "[",
+                        toString(tickets[i].number0),
+                        ",",
+                        toString(tickets[i].number1),
+                        ",",
+                        toString(tickets[i].number2),
+                        ",",
+                        toString(tickets[i].number3),
+                        ",",
+                        toString(tickets[i].number4),
+                        ",",
+                        toString(tickets[i].number5),
+                        ",",
+                        toString(tickets[i].number6),
+                        ",",
+                        toString(tickets[i].thePowerball),
+                        "]"
+                    )
+                );
+                myTickets = string(abi.encodePacked(myTickets, s));
+            }
+        }
+        return myTickets;
     }
 }
