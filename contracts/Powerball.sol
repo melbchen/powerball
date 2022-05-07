@@ -4,15 +4,23 @@ pragma solidity ^0.8.13;
 
 contract Powerball {
     struct Ticket {
-        uint256[] numbers;
+        uint256 number0;
+        uint256 number1;
+        uint256 number2;
+        uint256 number3;
+        uint256 number4;
+        uint256 number5;
+        uint256 number6;
         uint256 thePowerball;
     }
 
     address public manager; // the person who run draw function at the draw time
     uint256 public ticketPrice; // the price of each ticket
     uint256 public counter; // how many tickets now
+
     mapping(uint256 => address) public players; // counter mapped to player
     mapping(uint256 => Ticket) public games; // all valid games: counter mapped to ticket
+
     uint256 public prizePoolTotal; // the total value of current prize pool
     Ticket public winningTicket; // the winning ticket of current draw
     mapping(address => uint256) public pendingWithdrawals; // players can withdraw if the raletive balance is non-zero
@@ -25,7 +33,11 @@ contract Powerball {
     mapping(address => uint256) public winnersDivision6; // all players who won division 6
     mapping(address => uint256) public winnersDivision7; // all players who won division 7
 
-    /// fund transferred not insufficient to buying the tickets
+    uint256 private nounceRandom;
+    mapping(uint256 => uint256) public randomSevenNumbers;
+    mapping(uint256 => uint256) public sortedRandomSevenNumbers;
+
+    /// fund transferred not insufficient to pay the tickets
     error FundTransferredNotSufficient();
 
     constructor(uint256 _ticketPrice) {
@@ -39,67 +51,55 @@ contract Powerball {
         _;
     }
 
-    function random() private view returns (uint256) {
+    function random() private returns (uint256) {
         return
             uint256(
                 keccak256(
-                    abi.encodePacked(block.difficulty, block.timestamp, counter)
+                    abi.encodePacked(
+                        block.difficulty,
+                        block.timestamp,
+                        nounceRandom++
+                    )
                 )
             );
     }
 
-    function isExistingNumber(uint256[] memory numbers, uint256 newNumber)
+    function isExistingInRandomSevenNumbers(uint256 newNumber)
         private
-        pure
+        view
         returns (bool)
     {
-        for (uint256 i = 0; i < numbers.length; i++) {
-            if (numbers[i] == newNumber) {
+        for (uint256 i = 0; i < 7; i++) {
+            if (randomSevenNumbers[i] == newNumber) {
                 return true;
             }
         }
         return false;
     }
 
-    function randomlyGenerateSevenDifferentNumbers()
-        private
-        view
-        returns (uint256[] memory)
-    {
-        uint256[] memory selectedNumbers;
+    function randomlyGenerateSevenDifferentNumbers() public {
         for (uint256 i = 0; i < 7; i++) {
             uint256 aRandomNumber = (random() % 35) + 1;
-            bool theNumberExists = isExistingNumber(
-                selectedNumbers,
+            bool theNumberExists = isExistingInRandomSevenNumbers(
                 aRandomNumber
             );
             while (theNumberExists) {
                 aRandomNumber = (random() % 35) + 1;
-                theNumberExists = isExistingNumber(
-                    selectedNumbers,
-                    aRandomNumber
-                );
+                theNumberExists = isExistingInRandomSevenNumbers(aRandomNumber);
             }
-            selectedNumbers[i] = (aRandomNumber);
+            randomSevenNumbers[i] = aRandomNumber;
         }
-        return selectedNumbers;
     }
 
-    function sortNumbersInArray(uint256[] memory numbers)
-        private
-        pure
-        returns (uint256[] memory)
-    {
-        uint256[] memory sortedNumbers;
+    function sortTheRandomSevenNumbers() private {
         uint256 index = 0;
         for (uint256 i = 0; i < 35; i++) {
-            for (uint256 j = 0; j < numbers.length; j++) {
-                if (i + 1 == numbers[j]) {
-                    sortedNumbers[index++] = i;
+            for (uint256 j = 0; j < 7; j++) {
+                if (i + 1 == randomSevenNumbers[j]) {
+                    sortedRandomSevenNumbers[index++] = i;
                 }
             }
         }
-        return sortedNumbers;
     }
 
     // function isValidTicket
@@ -124,9 +124,22 @@ contract Powerball {
 
     function draw() public restricted {
         // uint256[] memory selectedNumbers;
-        winningTicket.numbers = sortNumbersInArray(
-            randomlyGenerateSevenDifferentNumbers()
-        );
+        randomlyGenerateSevenDifferentNumbers();
+        sortTheRandomSevenNumbers();
+        // uint256[] memory theSortedSevenNumbers;
+        winningTicket.number0 = sortedRandomSevenNumbers[0];
+        winningTicket.number1 = sortedRandomSevenNumbers[1];
+        winningTicket.number2 = sortedRandomSevenNumbers[2];
+        winningTicket.number3 = sortedRandomSevenNumbers[3];
+        winningTicket.number4 = sortedRandomSevenNumbers[4];
+        winningTicket.number5 = sortedRandomSevenNumbers[5];
+        winningTicket.number6 = sortedRandomSevenNumbers[6];
+        // for (uint256 i = 0; i < 7; i++) {
+        //     // theSortedSevenNumbers.push
+        //     winningNumbers.push(sortedRandomSevenNumbers[i]);
+        //     // winningTicket.numbers.push(sortedRandomSevenNumbers[i]);
+        // }
+        // winningTicket.numbers = sortedRandomSevenNumbers;
         winningTicket.thePowerball = (random() % 20) + 1;
     }
 
