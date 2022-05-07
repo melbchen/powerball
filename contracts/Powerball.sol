@@ -15,15 +15,17 @@ contract Powerball {
     }
 
     address public manager; // the person who run draw function at the draw time
+    // uint256 public initialPrizePool; // the initial value of current prize pool
     uint256 public ticketPrice; // the price of each ticket
     uint256 public counter; // how many tickets now
+    uint256 public prizePoolTotal; // the total value of current prize pool
+    Ticket public winningTicket; // the winning ticket of current draw
 
     mapping(uint256 => address) public players; // counter mapped to player
     mapping(uint256 => Ticket) public games; // all valid games: counter mapped to ticket
-
-    uint256 public prizePoolTotal; // the total value of current prize pool
-    Ticket public winningTicket; // the winning ticket of current draw
     mapping(address => uint256) public pendingWithdrawals; // players can withdraw if the raletive balance is non-zero
+
+    uint256 public drawId; // the draw sequence
     mapping(uint256 => Ticket) public pastDraws; // the record history of previous draws
     mapping(address => uint256) public winnersDivision1; // all players who won division 1
     mapping(address => uint256) public winnersDivision2; // all players who won division 2
@@ -39,6 +41,8 @@ contract Powerball {
 
     /// fund transferred not insufficient to pay the tickets
     error FundTransferredNotSufficient();
+    /// ticket(s) not valid, please ensure numbers are in range and not duplicated
+    error TicketNotValid();
 
     constructor(uint256 _ticketPrice) {
         manager = msg.sender;
@@ -102,20 +106,67 @@ contract Powerball {
         }
     }
 
-    // function isValidTicket
+    function transferTicketNumbersToArray(Ticket calldata ticket)
+        private
+        pure
+        returns (uint256[7] memory)
+    {
+        uint256[7] memory numbers;
+        numbers[0] = (ticket.number0);
+        numbers[1] = (ticket.number1);
+        numbers[2] = (ticket.number2);
+        numbers[3] = (ticket.number3);
+        numbers[4] = (ticket.number4);
+        numbers[5] = (ticket.number5);
+        numbers[6] = (ticket.number6);
+        return numbers;
+    }
+
+    function isValidTicket(Ticket calldata ticket) private pure returns (bool) {
+        uint256[7] memory numbers = transferTicketNumbersToArray(ticket);
+        if (ticket.thePowerball < 1 || ticket.number0 > 20) {
+            return false;
+        }
+        for (uint256 i = 0; i < numbers.length - 1; i++) {
+            if (numbers[i] < 1 || numbers[i] > 35) {
+                return false;
+            }
+            // check duplicates
+            for (uint256 j = 1; j < numbers.length - i; j++) {
+                if (numbers[i] == numbers[i + j]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
     // players can select and pay tickets to play.
     // the caller has to transfer sufficient fund.
+    // sample input in Remix: [[1,3,5,7,9,11,13,2], [2,4,6,8,10,12,14,6]]
     function play(Ticket[] calldata tickets) public payable {
         require(tickets.length > 0);
-        if (msg.value >= ticketPrice * tickets.length) {
-            for (uint256 i = 0; i < tickets.length; i++) {
-                players[counter] = msg.sender;
-                games[counter] = tickets[i];
-                counter++;
-            }
 
-            prizePoolTotal += msg.value;
+        // make sure fund is sufficient
+        if (msg.value >= ticketPrice * tickets.length) {
+            // check all tickets are valid
+            bool isAllTicketsValid = true;
+            for (uint256 i = 0; i < tickets.length; i++) {
+                if (!isValidTicket(tickets[i])) {
+                    isAllTicketsValid = false;
+                }
+            }
+            if (isAllTicketsValid) {
+                for (uint256 i = 0; i < tickets.length; i++) {
+                    players[counter] = msg.sender;
+                    games[counter] = tickets[i];
+                    counter++;
+                }
+
+                prizePoolTotal += msg.value;
+            } else {
+                revert TicketNotValid();
+            }
         } else {
             pendingWithdrawals[msg.sender] += msg.value; // refund insufficient payment
             revert FundTransferredNotSufficient();
@@ -123,10 +174,12 @@ contract Powerball {
     }
 
     function draw() public restricted {
-        // uint256[] memory selectedNumbers;
+        // put current ticket to pastDraws
+        pastDraws[drawId++] = winningTicket;
+
+        // generate the winning ticket
         randomlyGenerateSevenDifferentNumbers();
         sortTheRandomSevenNumbers();
-        // uint256[] memory theSortedSevenNumbers;
         winningTicket.number0 = sortedRandomSevenNumbers[0];
         winningTicket.number1 = sortedRandomSevenNumbers[1];
         winningTicket.number2 = sortedRandomSevenNumbers[2];
@@ -134,13 +187,9 @@ contract Powerball {
         winningTicket.number4 = sortedRandomSevenNumbers[4];
         winningTicket.number5 = sortedRandomSevenNumbers[5];
         winningTicket.number6 = sortedRandomSevenNumbers[6];
-        // for (uint256 i = 0; i < 7; i++) {
-        //     // theSortedSevenNumbers.push
-        //     winningNumbers.push(sortedRandomSevenNumbers[i]);
-        //     // winningTicket.numbers.push(sortedRandomSevenNumbers[i]);
-        // }
-        // winningTicket.numbers = sortedRandomSevenNumbers;
         winningTicket.thePowerball = (random() % 20) + 1;
+
+        // calculate the prize for each division
     }
 
     // Withdraw funds from the contract.
