@@ -19,6 +19,12 @@ contract Powerball {
         uint256 prize;
     }
 
+    struct Winner {
+        address winnerAddress;
+        uint256 prizeCategory;
+        Ticket winningTicket;
+    }
+
     uint256[] public prizeAllocationRate;
     address public manager; // the person who run draw function at the draw time
     uint256 public initialPrizePoolForNextDraw; // the initial value of prize pool for next Draw
@@ -29,6 +35,9 @@ contract Powerball {
 
     mapping(uint256 => address) public players; // counter mapped to player
     mapping(uint256 => Ticket) public games; // all valid games: counter mapped to ticket
+
+    uint256 public winnersCounter;
+    mapping(uint256 => Winner) public winners; // all winners: winnersCounter mapped to winner
     mapping(address => uint256) public pendingWithdrawals; // players can withdraw if the raletive balance is non-zero
 
     uint256 public drawId; // the draw sequence
@@ -255,6 +264,11 @@ contract Powerball {
             );
             if (divisionCategory < 9) {
                 divisions[divisionCategory].quantityOfWinners++;
+
+                winners[winnersCounter].winnerAddress = players[i];
+                winners[winnersCounter].prizeCategory = divisionCategory;
+                winners[winnersCounter].winningTicket = games[i];
+                winnersCounter++;
             }
         }
 
@@ -271,6 +285,13 @@ contract Powerball {
                     (prizePoolTotal * prizeAllocationRate[i]) /
                     10000;
             }
+        }
+
+        // Release prize to all winners
+        for (uint256 i = 0; i < winnersCounter; i++) {
+            pendingWithdrawals[winners[i].winnerAddress] += divisions[
+                winners[i].prizeCategory
+            ].prize;
         }
     }
 
