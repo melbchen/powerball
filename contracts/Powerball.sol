@@ -25,10 +25,21 @@ contract Powerball {
         Ticket winningTicket;
     }
 
-    uint256[] public prizeAllocationRate;
-    address public manager; // the person who run draw function at the draw time
+    struct Draw {
+        uint256 drawId;
+        uint256 drawTime;
+        Ticket winningTicket;
+        uint256 quantityOfTickets;
+        uint256 initialPrizePool;
+        uint256 prizePoolTotal;
+    }
+
+    uint256[] public prizeAllocationRate; // allocation rates of Prize Pool
+    address public manager; // the address who runs draw function at the draw time. It could be a external contract address
+
+    uint256 public drawId; // the draw sequence ID
     uint256 public initialPrizePoolForNextDraw; // the initial value of prize pool for next Draw
-    uint256 public ticketPrice; // the price of each ticket
+    uint256 public ticketPrice; // the price of each ticket in ether
     uint256 public counter; // how many tickets now
     uint256 public prizePoolTotal; // the total value of current prize pool
     Ticket public winningTicket; // the winning ticket of current draw
@@ -36,35 +47,27 @@ contract Powerball {
     mapping(uint256 => address) public players; // counter mapped to player
     mapping(uint256 => Ticket) public games; // all valid games: counter mapped to ticket
 
-    uint256 public winnersCounter;
+    uint256 public winnersCounter; // how many winners in current draw
     mapping(uint256 => Winner) public winners; // all winners: winnersCounter mapped to winner
-    mapping(address => uint256) public pendingWithdrawals; // players can withdraw if the raletive balance is non-zero
-
-    uint256 public drawId; // the draw sequence
-    mapping(uint256 => Ticket) public pastDraws; // the record history of previous draws
-    mapping(address => uint256) public winnersDivision1; // all players who won division 1
-    mapping(address => uint256) public winnersDivision2; // all players who won division 2
-    mapping(address => uint256) public winnersDivision3; // all players who won division 3
-    mapping(address => uint256) public winnersDivision4; // all players who won division 4
-    mapping(address => uint256) public winnersDivision5; // all players who won division 5
-    mapping(address => uint256) public winnersDivision6; // all players who won division 6
-    mapping(address => uint256) public winnersDivision7; // all players who won division 7
+    mapping(address => uint256) private pendingWithdrawals; // players can withdraw if their balance is non-zero
 
     mapping(uint256 => Division) public divisions; // all divisions of current draw
 
-    uint256 private nounceRandom;
-    mapping(uint256 => uint256) public randomSevenNumbers;
-    mapping(uint256 => uint256) public sortedRandomSevenNumbers;
+    mapping(uint256 => Draw) public pastDraws; // the record history of past draws
 
-    /// fund transferred not insufficient to pay the tickets
+    uint256 private nounceRandom; // used for generate random numbers
+    mapping(uint256 => uint256) private randomSevenNumbers; // the seven numbers generated randomly
+    mapping(uint256 => uint256) private sortedRandomSevenNumbers; // sorted numbers
+
+    /// fund transferred not sufficient to pay the tickets
     error FundTransferredNotSufficient();
     /// ticket(s) not valid, please ensure numbers are in range and not duplicated
     error TicketNotValid();
 
     constructor(uint256 _ticketPrice) {
         manager = msg.sender;
-        ticketPrice = _ticketPrice;
-        prizeAllocationRate = [3500, 180, 110, 200, 150, 970, 760, 1500, 2630];
+        ticketPrice = _ticketPrice * 1000000000000000000; // in ether
+        prizeAllocationRate = [3500, 180, 110, 200, 150, 970, 760, 1500, 2630]; // refer to: https://www.thelott.com/about/prize-pool
     }
 
     // only manager can call
@@ -73,6 +76,7 @@ contract Powerball {
         _;
     }
 
+    // generate a pseudorandom number
     function random() private returns (uint256) {
         return
             uint256(
@@ -86,6 +90,7 @@ contract Powerball {
             );
     }
 
+    // check if a number exists in the randomSevenNumbers
     function isExistingInRandomSevenNumbers(uint256 newNumber)
         private
         view
@@ -99,7 +104,8 @@ contract Powerball {
         return false;
     }
 
-    function randomlyGenerateSevenDifferentNumbers() public {
+    // randomly generate seven different numbers
+    function randomlyGenerateSevenDifferentNumbers() private {
         for (uint256 i = 0; i < 7; i++) {
             uint256 aRandomNumber = (random() % 35) + 1;
             bool theNumberExists = isExistingInRandomSevenNumbers(
@@ -111,8 +117,17 @@ contract Powerball {
             }
             randomSevenNumbers[i] = aRandomNumber;
         }
+        // // test: 3,5,7,9,11,13
+        // randomSevenNumbers[0] = 3;
+        // randomSevenNumbers[1] = 5;
+        // randomSevenNumbers[2] = 7;
+        // randomSevenNumbers[3] = 9;
+        // randomSevenNumbers[4] = 11;
+        // randomSevenNumbers[5] = 12;
+        // randomSevenNumbers[6] = 13;
     }
 
+    // sort the randomSevenNumbers in ascending order
     function sortTheRandomSevenNumbers() private {
         uint256 index = 0;
         for (uint256 i = 0; i < 35; i++) {
@@ -124,6 +139,7 @@ contract Powerball {
         }
     }
 
+    // transfer ticketNumbers from map to array
     function transferTicketNumbersToArray(Ticket memory ticket)
         private
         pure
@@ -140,6 +156,9 @@ contract Powerball {
         return numbers;
     }
 
+    // check if a ticket is valid:
+    // 1. numbers and the powerball are in the correct range
+    // 2. no duplicates in numbers
     function isValidTicket(Ticket calldata ticket) private pure returns (bool) {
         uint256[7] memory numbers = transferTicketNumbersToArray(ticket);
         if (ticket.thePowerball < 1 || ticket.number0 > 20) {
@@ -159,6 +178,8 @@ contract Powerball {
         return true;
     }
 
+    // determin the division category.
+    // refer to: https://www.thelott.com/powerball/stories/australian-powerball-winners
     function determineDivisionCategory(
         uint256 quantityOfWinningNumbers,
         bool isWinningThePowerball
@@ -195,6 +216,7 @@ contract Powerball {
     }
 
     // players can select and pay tickets to play.
+    // multiple tickets supported in one transaction.
     // the caller has to transfer sufficient fund.
     // sample input in Remix: [[1,3,5,7,9,11,13,2], [2,4,6,8,10,12,14,6]]
     function play(Ticket[] calldata tickets) public payable {
@@ -226,10 +248,13 @@ contract Powerball {
         }
     }
 
+    // generate the winning ticket
+    // calculate the quantity of winners for each division
+    // calculate the prize for each division
+    // release the prize to players. If no one wins in a division, put the fund into next draw
+    // record the draw in history
+    // reset the game for next draw
     function draw() public restricted {
-        // put current ticket to pastDraws
-        pastDraws[drawId++] = winningTicket;
-
         // generate the winning ticket
         randomlyGenerateSevenDifferentNumbers();
         sortTheRandomSevenNumbers();
@@ -293,6 +318,23 @@ contract Powerball {
                 winners[i].prizeCategory
             ].prize;
         }
+
+        // put current draw to pastDraws
+        pastDraws[drawId].drawId = drawId;
+        pastDraws[drawId].drawTime = block.timestamp;
+        pastDraws[drawId].winningTicket = winningTicket;
+        pastDraws[drawId].quantityOfTickets = counter;
+        pastDraws[drawId].prizePoolTotal = prizePoolTotal;
+        pastDraws[drawId].initialPrizePool = initialPrizePoolForNextDraw;
+        drawId++;
+
+        // reset the game.
+        // winners, games, winningTicket, winners, divisions
+        // don't need to reset because of being overwrited in next game
+        prizePoolTotal = initialPrizePoolForNextDraw;
+        initialPrizePoolForNextDraw = 0;
+        counter = 0;
+        winnersCounter = 0;
     }
 
     // Withdraw funds from the contract.
