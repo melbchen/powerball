@@ -37,6 +37,6 @@ When deploy the contract, the ticket price will have to be provided. And the man
 - withdraw -- withdraw funds from the contract. If called, all funds available to the caller should be refunded. This is the **only** place the contract ever transfers funds out.
 - getMyTickets -- get all tickets as a **string** for a caller. A sample return data is [1,3,5,7,9,11,13,2][2,4,6,8,10,12,14,6].
 
-### test
+## Test
 
-To test the contract, in the project root directory, run `truffle test`.
+To test the contract, run `truffle test` in the project root directory.
