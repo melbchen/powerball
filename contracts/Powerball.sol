@@ -133,7 +133,7 @@ contract Powerball {
         for (uint256 i = 0; i < 35; i++) {
             for (uint256 j = 0; j < 7; j++) {
                 if (i + 1 == randomSevenNumbers[j]) {
-                    sortedRandomSevenNumbers[index++] = i;
+                    sortedRandomSevenNumbers[index++] = i + 1;
                 }
             }
         }
