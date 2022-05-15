@@ -19,7 +19,7 @@ When deploy the contract, the ticket price will have to be provided. And the man
 - manager -- the address who runs draw function at the draw time. It could be a external contract address
 - drawId -- the draw sequence ID
 - initialPrizePoolForNextDraw -- the initial value of prize pool for next Draw
-- ticketPrice -- the price of each ticket in **_ether_**
+- ticketPrice -- the price of each ticket in **_wei_**
 - counter -- how many tickets in total now
 - prizePoolTotal -- the total value of current prize pool
 - winningTicket -- the winning ticket of current draw

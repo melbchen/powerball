@@ -66,7 +66,7 @@ contract Powerball {
 
     constructor(uint256 _ticketPrice) {
         manager = msg.sender;
-        ticketPrice = _ticketPrice * 1000000000000000000; // ether to wei
+        ticketPrice = _ticketPrice; // wei
         prizeAllocationRate = [3500, 180, 110, 200, 150, 970, 760, 1500, 2630]; // refer to: https://www.thelott.com/about/prize-pool
     }
 
